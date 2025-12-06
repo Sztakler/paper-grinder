@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 export function App() {
   const [file, setFile] = useState(null);
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState("");
+  const [progress, setProgress] = useState({ current: 0, total: 0 });
+  const wsRef = useRef(null);
 
   const handleUpload = async (selectedFile: File) => {
     if (!selectedFile) return;
@@ -29,6 +31,31 @@ export function App() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleWSUpload = (file) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const pdfArrayBuffer = reader.result;
+      wsRef.current = new WebSocket("ws://localhost:8000/ws/upload");
+      wsRef.current.binaryType = "arrayBuffer";
+
+      wsRef.current.onopen = () => {
+        wsRef.current.send(pdfArrayBuffer);
+      };
+
+      wsRef.current.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.status === "done") {
+          console.log("Upload finished");
+        } else {
+          setText((prev) => prev + data.text);
+          setProgress({ current: data.chunk_index, total: data.total_chunks });
+        }
+      };
+    };
+
+    reader.readAsArrayBuffer(file);
   };
 
   return (
@@ -73,7 +100,7 @@ export function App() {
                       onChange={(e) => {
                         const file = e.target.files[0];
                         setFile(file);
-                        handleUpload(file);
+                        handleWSUpload(file);
                       }}
                     />
                   </label>
@@ -88,7 +115,10 @@ export function App() {
         </form>
 
         {loading && <p>{loadingMessage}</p>}
-        {!loading && <pre className="">{text}</pre>}
+        <p>
+          Progress: {progress.current}/{progress.total} chunks
+        </p>
+        {!loading && <pre className="w-prose bg-red-500 text-wrap">{text}</pre>}
       </div>
     </div>
   );

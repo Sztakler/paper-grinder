@@ -53,7 +53,7 @@ async def upload_pdf(file: UploadFile = File(...)):
 @app.websocket("/ws/upload")
 async def websocket_upload(websocket: WebSocket):
     await websocket.accept()
-    await websocket.send_text("CONNECTED")
+    await websocket.send_json({"status": "connected"})
 
     pdf_bytes = await websocket.receive_bytes()
     reader = PdfReader(BytesIO(pdf_bytes))
@@ -82,5 +82,4 @@ async def websocket_upload(websocket: WebSocket):
         await asyncio.sleep(0.05)
 
     await websocket.send_json({"status": "done"})
-    await websocket.send_text("___done___")
     await websocket.close()
