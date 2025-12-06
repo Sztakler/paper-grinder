@@ -4,4 +4,5 @@ pypdf
 chromadb
 python-dotenv
 sentence-transformers
+python-multipart
 
