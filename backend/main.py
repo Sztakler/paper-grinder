@@ -13,7 +13,7 @@ def hello():
 def is_text_legible(text: str) -> bool:
     alnum = len(re.findall(r"[a-zA-Z0-9żźćńąśęóŻŹĆŃĄŚŁĘÓ]", text))
     total = len(text)
-    return total > 0 and (alnum / total) > 0.99
+    return total > 0 and (alnum / total) > 0.6
 
 @app.post("/upload")
 async def upload_pdf(file: UploadFile = File(...)):
