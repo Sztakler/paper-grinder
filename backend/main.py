@@ -1,9 +1,10 @@
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from pypdf import PdfReader
 from pdf2image import convert_from_bytes
 import pytesseract
 import re
+import asyncio
 
 app = FastAPI()
 
@@ -46,4 +47,5 @@ async def upload_pdf(file: UploadFile = File(...)):
             text += pytesseract.image_to_string(page, lang="pol") + "\n"
 
     return {"text": text[:1000]}
+
 
