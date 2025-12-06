@@ -5,4 +5,5 @@ chromadb
 python-dotenv
 sentence-transformers
 python-multipart
-pdfplumber
+pdf2image
+pytesseract
