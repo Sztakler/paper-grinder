@@ -5,6 +5,7 @@ from pdf2image import convert_from_bytes
 import pytesseract
 import re
 import asyncio
+from io import BytesIO
 
 app = FastAPI()
 
@@ -49,3 +50,37 @@ async def upload_pdf(file: UploadFile = File(...)):
     return {"text": text[:1000]}
 
 
+@app.websocket("/ws/upload")
+async def websocket_upload(websocket: WebSocket):
+    await websocket.accept()
+    await websocket.send_text("CONNECTED")
+
+    pdf_bytes = await websocket.receive_bytes()
+    reader = PdfReader(BytesIO(pdf_bytes))
+    total_pages = len(reader.pages)
+    chunk_size = 5
+
+    for start in range(0, total_pages, chunk_size):
+        end = min(start + chunk_size, total_pages)
+        text_chunk = ""
+
+        for page in reader.pages[start:end]:
+            page_text = page.extract_text()
+            text_chunk += page_text + "\n" if page_text else ""
+
+        if not is_text_legible(text_chunk):
+            pages_images = convert_from_bytes(pdf_bytes, first_page=start+1, last_page=end)
+            text_chunk = ""
+            for page_image in pages_images:
+                text_chunk += pytesseract.image_to_string(page_image, lang="pol") + "\n"
+
+        await websocket.send_json({
+                                      "chunk_index": start/chunk_size + 1,
+                                      "total_chunks": (total_pages + chunk_size - 1) // chunk_size,
+                                      "text": text_chunk,
+                                  })
+        await asyncio.sleep(0.05)
+
+    await websocket.send_json({"status": "done"})
+    await websocket.send_text("___done___")
+    await websocket.close()
