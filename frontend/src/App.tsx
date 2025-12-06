@@ -118,7 +118,7 @@ export function App() {
         <p>
           Progress: {progress.current}/{progress.total} chunks
         </p>
-        {!loading && <pre className="w-prose bg-red-500 text-wrap">{text}</pre>}
+        {!loading && <pre className="w-prose text-wrap">{text}</pre>}
       </div>
     </div>
   );
