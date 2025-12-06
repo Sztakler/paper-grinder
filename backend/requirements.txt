@@ -4,4 +4,6 @@ pypdf
 chromadb
 python-dotenv
 sentence-transformers
-
+python-multipart
+pdf2image
+pytesseract
