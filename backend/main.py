@@ -1,5 +1,6 @@
 from fastapi import FastAPI, UploadFile, File
-from pypdf import PdfReader
+from pdf2image import convert_from_path
+import pytesseract
 
 app = FastAPI()
 
@@ -9,9 +10,9 @@ def hello():
 
 @app.post("/upload")
 async def upload_pdf(file: UploadFile = File(...)):
-    reader = PdfReader("homer-iliada.pdf")
+    pages = convert_from_path("homer-iliada.pdf")
     text = ""
-    for page in reader.pages:
-        text += page.extract_text() + "\n"
+    for page in pages[:5]:
+        text += pytesseract.image_to_string(page, lang="pol") + '\n'
 
-    return {"text": text[:500]}
+    return {"text": text[:1000]}
