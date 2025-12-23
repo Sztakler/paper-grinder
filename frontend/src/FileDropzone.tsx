@@ -40,7 +40,7 @@ export default function FileDropzone({}: FileDropzoneProps) {
   };
 
   return (
-    <div className="flex justify-center">
+    <div className="flex flex-col items-center gap-4">
       <div
         className={`mt-2 flex justify-center rounded-lg border border-dashed border-white/25 px-16 py-12 w-fit ${isDragging ? "bg-[#d4d6d2]" : ""}`}
         onDragOver={handleDragOver}
@@ -86,30 +86,5 @@ export default function FileDropzone({}: FileDropzoneProps) {
       </p>
       {!loading && <pre className="w-prose text-wrap">{text}</pre>}
     </div>
-
-    // <div
-    //   onDragOver={handleDragOver}
-    //   onDragLeave={handleDragLeave}
-    //   onDrop={handleDrop}
-    // className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-all ${
-    //     isDragging
-    //       ? "bg-gray-200 border-blue-500"
-    //       : "bg-gray-50 border-gray-400"
-    //   }`}
-    //   onClick={() => document.getElementById("fileInput")?.click()}
-    // >
-    //   <input
-    //     id="fileInput"
-    //     type="file"
-    //     accept="application/pdf"
-    //     className="hidden"
-    //     onChange={handleManualPick}
-    //   />
-
-    //   <p className="text-xl font-semibold">
-    //     {isDragging ? "Puść to kurwa" : "Przeciągnij PDF albo kliknij"}
-    //   </p>
-    //   <p className="text-gray-500 mt-2 text-sm">Obsługuję tylko pliki PDF</p>
-    // </div>
   );
 }
