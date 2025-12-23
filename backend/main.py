@@ -6,8 +6,10 @@ import pytesseract
 import re
 import asyncio
 from io import BytesIO
+import uuid
 
 app = FastAPI()
+app.state.jobs = {}
 
 origins = [
     "http://localhost:3000",
@@ -37,38 +39,32 @@ def clean_text(text):
 
 @app.post("/upload")
 async def upload_pdf(file: UploadFile = File(...)):
-    
-    reader = PdfReader(file.file)
-    text = ""
-    for page in reader.pages[:5]:
-        page_text = page.extract_text()
-        text += page_text + '\n' if page_text else ""
+    job_id = str(uuid.uuid4())
+    pdf_bytes = await file.read()
 
-    if not is_text_legible(text):
-        file.file.seek(0)
-        content = file.file.read()
-        pages = convert_from_bytes(content)
-        text = ""
-        for page in pages[:5]:
-            text += pytesseract.image_to_string(page, lang="pol") + "\n"
-            text = clean_text(text)
+    app.state.jobs[job_id] = {
+        "pdf": pdf_bytes,
+        "queue": asyncio.Queue()
+    }
 
-    return {"text": text[:1000]}
+    asyncio.create_task(process_pdf(job_id))
+
+    return { "job_id": job_id }
 
 
-@app.websocket("/ws/upload")
-async def websocket_upload(websocket: WebSocket):
-    await websocket.accept()
-    await websocket.send_json({"status": "connected"})
+async def process_pdf(job_id: str):
+    job = app.state.jobs[job_id]
+    pdf_bytes = job["pdf"]
+    queue = job["queue"]
 
-    pdf_bytes = await websocket.receive_bytes()
+    # process PDF
     reader = PdfReader(BytesIO(pdf_bytes))
     total_pages = len(reader.pages)
     chunk_size = 5
 
     for start in range(0, total_pages, chunk_size):
         end = min(start + chunk_size, total_pages)
-        text_chunk = ""
+        text_chunk = "" # pages
 
         for page in reader.pages[start:end]:
             page_text = page.extract_text()
@@ -81,12 +77,24 @@ async def websocket_upload(websocket: WebSocket):
                 text_chunk += pytesseract.image_to_string(page_image, lang="pol") + "\n"
         text_chunk = clean_text(text_chunk)
 
-        await websocket.send_json({
-                                      "chunk_index": start/chunk_size + 1,
-                                      "total_chunks": (total_pages + chunk_size - 1) // chunk_size,
-                                      "text": text_chunk,
-                                  })
-        await asyncio.sleep(0.05)
+        await queue.put({
+                            "chunk_index": start // chunk_size + 1,
+                            "total_chunks": (total_pages + chunk_size - 1) // chunk_size,
+                            "text": text_chunk,
+                        })
+        
+    await queue.put({"status": "done"})
+    
 
-    await websocket.send_json({"status": "done"})
-    await websocket.close()
+
+@app.websocket("/ws/{job_id}")
+async def ws_stream(websocket: WebSocket, job_id: str):
+    await websocket.accept()
+    queue = app.state.jobs[job_id]["queue"]
+
+    while True:
+        msg = await queue.get()
+        await websocket.send_json(msg)
+        if msg.get("status") == "done":
+            break
+
