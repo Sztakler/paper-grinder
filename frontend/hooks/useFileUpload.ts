@@ -22,14 +22,18 @@ export function useFileUpload() {
 
       wsCancelRef.current = streamResultWS(job_id, {
         onChunk: (data: any) => {
-          console.log("🔄 onChunk called with:", data.chunk_index);
-          console.log("📝 Current text length:", text.length);
-          setText((prev) => {
-            const newText = prev + data.text;
-            console.log("📝 New text length:", newText.length);
-            return newText;
-          });
-          setProgress({ current: data.chunk_index, total: data.total_chunks });
+          console.log(
+            "🔄 Before - textRef.current length:",
+            textRef.current.length,
+          );
+          textRef.current += data.text;
+          console.log(
+            "🔄 After - textRef.current length:",
+            textRef.current.length,
+          );
+          console.log("🔄 Setting text to state...");
+          setText(textRef.current);
+          console.log("🔄 State updated");
         },
         onDone: () => setLoading(false),
         onError: (err: any) => {

@@ -28,85 +28,98 @@ app.add_middleware(
 def hello():
     return {"msg": "Hello, there."}
 
-
 @app.post("/upload")
 async def upload_pdf(file: UploadFile = File(...)):
     job_id = str(uuid.uuid4())
     pdf_bytes = await file.read()
-
     app.state.jobs[job_id] = {
         "pdf": pdf_bytes,
         "queue": asyncio.Queue(),
-        "processing": True
+        "started": False  # ← ZMIEŃ na False
     }
-
-    asyncio.create_task(process_pdf(job_id))
-
+    # ❌ USUŃ TO: asyncio.create_task(process_pdf(job_id))
     return { "job_id": job_id }
-
 
 async def process_pdf(job_id: str):
     try:
         job = app.state.jobs[job_id]
         pdf_bytes = job["pdf"]
         queue: asyncio.Queue = job["queue"]
-
-        # process PDF
+        
         reader = PdfReader(BytesIO(pdf_bytes))
         total_pages = len(reader.pages)
-        chunk_size = 5 # pages
-
+        chunk_size = 5
+        
         for start in range(0, total_pages, chunk_size):
             end = min(start + chunk_size, total_pages)
             text_chunk = ""
-
+            
             for page in reader.pages[start:end]:
                 page_text = page.extract_text()
                 text_chunk += page_text + "\n" if page_text else ""
-
+            
             if not is_text_legible(text_chunk):
                 pages_images = convert_from_bytes(pdf_bytes, first_page=start+1, last_page=end)
                 text_chunk = ""
                 for page_image in pages_images:
                     text_chunk += pytesseract.image_to_string(page_image, lang="pol") + "\n"
+            
             text_chunk = clean_text(text_chunk)
-
+            chunk_num = start // chunk_size + 1
+            print(f"Putting chunk {chunk_num} into queue")
+            
             await queue.put({
-                                "chunk_index": start // chunk_size + 1,
-                                "total_chunks": (total_pages + chunk_size - 1) // chunk_size,
-                                "text": text_chunk,
-                            })
+                "chunk_index": chunk_num,
+                "total_chunks": (total_pages + chunk_size - 1) // chunk_size,
+                "text": text_chunk,
+            })
+            
+            # OPCJONALNIE: Dodaj małe opóźnienie żeby wymusić wysyłanie
+            await asyncio.sleep(0.01)
         
+        print("Putting 'done' into queue")
         await queue.put({"status": "done"})
+        
     except Exception as e:
+        print(f"Error in process_pdf: {e}")
         await queue.put({"status": "error", "message": str(e)})
-    finally:
-        await queue.put({"status": "done"})
-    
-
 
 @app.websocket("/ws/{job_id}")
 async def ws_stream(websocket: WebSocket, job_id: str):
     await websocket.accept()
-
+    print(f"WebSocket connected for job {job_id}")
+    
     if job_id not in app.state.jobs:
         await websocket.send_json({"error": "job not found"})
         await websocket.close()
         return
     
-    queue: asyncio.Queue = app.state.jobs[job_id]["queue"]
-
+    job = app.state.jobs[job_id]
+    
+    # Startuj przetwarzanie dopiero teraz
+    if not job["started"]:
+        job["started"] = True
+        print("Starting PDF processing...")
+        asyncio.create_task(process_pdf(job_id))
+    
+    queue: asyncio.Queue = job["queue"]
+    
     while True:
+        print("Waiting for message from queue...")
         msg = await queue.get()
+        print(f"Got message: chunk={msg.get('chunk_index')}, status={msg.get('status')}")
+        
         try:
             await websocket.send_json(msg)
+            print("Message sent to client")
         except Exception as e:
             print(f"WS send failed: {e}")
             break
-
+        
         if msg.get("status") == "done":
+            print("Done message sent, closing")
             break
-
+    
     await websocket.close()
     del app.state.jobs[job_id]
-
+    print(f"Job {job_id} cleaned up")
