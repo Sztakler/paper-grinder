@@ -7,6 +7,7 @@ import re
 import asyncio
 from io import BytesIO
 import uuid
+from utils.text import is_text_legible, clean_text
 
 app = FastAPI()
 app.state.jobs = {}
@@ -27,15 +28,6 @@ app.add_middleware(
 def hello():
     return {"msg": "Hello, there."}
 
-def is_text_legible(text: str) -> bool:
-    alnum = len(re.findall(r"[a-zA-Z0-9żźćńąśęóŻŹĆŃĄŚŁĘÓ]", text))
-    total = len(text)
-    return total > 0 and (alnum / total) > 0.6
-
-def clean_text(text):
-    text = re.sub(r"\s+", " ", text)
-    text = re.sub(r'(?<!\.)\.(?!\.)|[!?]', lambda m: m.group(0) + '\n', text)
-    return text
 
 @app.post("/upload")
 async def upload_pdf(file: UploadFile = File(...)):
@@ -44,7 +36,8 @@ async def upload_pdf(file: UploadFile = File(...)):
 
     app.state.jobs[job_id] = {
         "pdf": pdf_bytes,
-        "queue": asyncio.Queue()
+        "queue": asyncio.Queue(),
+        "processing": True
     }
 
     asyncio.create_task(process_pdf(job_id))
@@ -53,48 +46,67 @@ async def upload_pdf(file: UploadFile = File(...)):
 
 
 async def process_pdf(job_id: str):
-    job = app.state.jobs[job_id]
-    pdf_bytes = job["pdf"]
-    queue = job["queue"]
+    try:
+        job = app.state.jobs[job_id]
+        pdf_bytes = job["pdf"]
+        queue: asyncio.Queue = job["queue"]
 
-    # process PDF
-    reader = PdfReader(BytesIO(pdf_bytes))
-    total_pages = len(reader.pages)
-    chunk_size = 5
+        # process PDF
+        reader = PdfReader(BytesIO(pdf_bytes))
+        total_pages = len(reader.pages)
+        chunk_size = 5 # pages
 
-    for start in range(0, total_pages, chunk_size):
-        end = min(start + chunk_size, total_pages)
-        text_chunk = "" # pages
-
-        for page in reader.pages[start:end]:
-            page_text = page.extract_text()
-            text_chunk += page_text + "\n" if page_text else ""
-
-        if not is_text_legible(text_chunk):
-            pages_images = convert_from_bytes(pdf_bytes, first_page=start+1, last_page=end)
+        for start in range(0, total_pages, chunk_size):
+            end = min(start + chunk_size, total_pages)
             text_chunk = ""
-            for page_image in pages_images:
-                text_chunk += pytesseract.image_to_string(page_image, lang="pol") + "\n"
-        text_chunk = clean_text(text_chunk)
 
-        await queue.put({
-                            "chunk_index": start // chunk_size + 1,
-                            "total_chunks": (total_pages + chunk_size - 1) // chunk_size,
-                            "text": text_chunk,
-                        })
+            for page in reader.pages[start:end]:
+                page_text = page.extract_text()
+                text_chunk += page_text + "\n" if page_text else ""
+
+            if not is_text_legible(text_chunk):
+                pages_images = convert_from_bytes(pdf_bytes, first_page=start+1, last_page=end)
+                text_chunk = ""
+                for page_image in pages_images:
+                    text_chunk += pytesseract.image_to_string(page_image, lang="pol") + "\n"
+            text_chunk = clean_text(text_chunk)
+
+            await queue.put({
+                                "chunk_index": start // chunk_size + 1,
+                                "total_chunks": (total_pages + chunk_size - 1) // chunk_size,
+                                "text": text_chunk,
+                            })
         
-    await queue.put({"status": "done"})
+        await queue.put({"status": "done"})
+    except Exception as e:
+        await queue.put({"status": "error", "message": str(e)})
+    finally:
+        await queue.put({"status": "done"})
     
 
 
 @app.websocket("/ws/{job_id}")
 async def ws_stream(websocket: WebSocket, job_id: str):
     await websocket.accept()
-    queue = app.state.jobs[job_id]["queue"]
+
+    if job_id not in app.state.jobs:
+        await websocket.send_json({"error": "job not found"})
+        await websocket.close()
+        return
+    
+    queue: asyncio.Queue = app.state.jobs[job_id]["queue"]
 
     while True:
         msg = await queue.get()
-        await websocket.send_json(msg)
+        try:
+            await websocket.send_json(msg)
+        except Exception as e:
+            print(f"WS send failed: {e}")
+            break
+
         if msg.get("status") == "done":
             break
+
+    await websocket.close()
+    del app.state.jobs[job_id]
 

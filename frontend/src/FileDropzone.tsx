@@ -84,7 +84,7 @@ export default function FileDropzone({}: FileDropzoneProps) {
       <p>
         Progress: {progress.current}/{progress.total} chunks
       </p>
-      {!loading && <pre className="w-prose text-wrap">{text}</pre>}
+      {text && <pre className="w-prose text-wrap">{text}</pre>}
     </div>
   );
 }

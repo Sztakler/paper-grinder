@@ -4,15 +4,16 @@ import { streamResultWS } from "../services/streamService";
 
 export function useFileUpload() {
   const [text, setText] = useState("");
+  const textRef = useRef("");
   const [loading, setLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState("");
   const [progress, setProgress] = useState({ current: 0, total: 0 });
-
   const wsCancelRef = { current: null as null | (() => void) };
 
   async function upload(file: File) {
     setLoading(true);
     setText("");
+    textRef.current = "";
     setProgress({ current: 0, total: 0 });
     setLoadingMessage(file.name);
 
@@ -21,7 +22,13 @@ export function useFileUpload() {
 
       wsCancelRef.current = streamResultWS(job_id, {
         onChunk: (data: any) => {
-          setText((prev) => prev + data.text);
+          console.log("🔄 onChunk called with:", data.chunk_index);
+          console.log("📝 Current text length:", text.length);
+          setText((prev) => {
+            const newText = prev + data.text;
+            console.log("📝 New text length:", newText.length);
+            return newText;
+          });
           setProgress({ current: data.chunk_index, total: data.total_chunks });
         },
         onDone: () => setLoading(false),
