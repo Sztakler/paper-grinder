@@ -14,7 +14,6 @@ def upload_pdf():
         res = requests.post(UPLOAD_URL, files=files)
     res.raise_for_status()
     job_id = res.json()["job_id"]
-    print(f"Uploaded PDF, got job_id: {job_id}")
     return job_id
 
 async def stream_job(job_id: str):
@@ -24,7 +23,6 @@ async def stream_job(job_id: str):
             try:
                 msg = await ws.recv()
                 data = json.loads(msg)
-                print(data)
                 if data.get("status") == "done":
                     break
                 await asyncio.sleep(2)

@@ -35,9 +35,8 @@ async def upload_pdf(file: UploadFile = File(...)):
     app.state.jobs[job_id] = {
         "pdf": pdf_bytes,
         "queue": asyncio.Queue(),
-        "started": False  # ← ZMIEŃ na False
+        "started": False
     }
-    # ❌ USUŃ TO: asyncio.create_task(process_pdf(job_id))
     return { "job_id": job_id }
 
 async def process_pdf(job_id: str):
@@ -74,10 +73,8 @@ async def process_pdf(job_id: str):
                 "text": text_chunk,
             })
             
-            # OPCJONALNIE: Dodaj małe opóźnienie żeby wymusić wysyłanie
             await asyncio.sleep(0.01)
         
-        print("Putting 'done' into queue")
         await queue.put({"status": "done"})
         
     except Exception as e:
@@ -87,7 +84,6 @@ async def process_pdf(job_id: str):
 @app.websocket("/ws/{job_id}")
 async def ws_stream(websocket: WebSocket, job_id: str):
     await websocket.accept()
-    print(f"WebSocket connected for job {job_id}")
     
     if job_id not in app.state.jobs:
         await websocket.send_json({"error": "job not found"})
@@ -96,30 +92,22 @@ async def ws_stream(websocket: WebSocket, job_id: str):
     
     job = app.state.jobs[job_id]
     
-    # Startuj przetwarzanie dopiero teraz
     if not job["started"]:
         job["started"] = True
-        print("Starting PDF processing...")
         asyncio.create_task(process_pdf(job_id))
     
     queue: asyncio.Queue = job["queue"]
     
     while True:
-        print("Waiting for message from queue...")
         msg = await queue.get()
-        print(f"Got message: chunk={msg.get('chunk_index')}, status={msg.get('status')}")
         
         try:
             await websocket.send_json(msg)
-            print("Message sent to client")
         except Exception as e:
-            print(f"WS send failed: {e}")
             break
         
         if msg.get("status") == "done":
-            print("Done message sent, closing")
             break
     
     await websocket.close()
     del app.state.jobs[job_id]
-    print(f"Job {job_id} cleaned up")
