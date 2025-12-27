@@ -15,7 +15,7 @@ export function useFileUpload() {
     setText("");
     textRef.current = "";
     setProgress({ current: 0, total: 0 });
-    setLoadingMessage(file.name);
+    setLoadingMessage(`Loading ${file.name}...`);
 
     try {
       const { job_id } = await uploadFileHTTP(file);
@@ -34,6 +34,10 @@ export function useFileUpload() {
           console.log("🔄 Setting text to state...");
           setText(textRef.current);
           console.log("🔄 State updated");
+          setProgress({
+            current: data.chunk_index,
+            total: data.total_chunks,
+          });
         },
         onDone: () => setLoading(false),
         onError: (err: any) => {

@@ -40,9 +40,9 @@ export default function FileDropzone({}: FileDropzoneProps) {
   };
 
   return (
-    <div className="flex flex-col items-center gap-4">
+    <div className="flex flex-col items-center gap-8">
       <div
-        className={`mt-2 flex justify-center rounded-lg border border-dashed border-white/25 px-16 py-12 w-fit ${isDragging ? "bg-[#d4d6d2]" : ""}`}
+        className={`mt-8 flex justify-center rounded-lg border border-dashed border-white/25 px-16  w-fit ${isDragging ? "bg-[#d4d6d2]" : ""}`}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
@@ -80,10 +80,14 @@ export default function FileDropzone({}: FileDropzoneProps) {
           <p className="text-xs/5 text-gray-600">PNG, JPG, GIF up to 10MB</p>
         </div>
       </div>
-      {loading && <p>{loadingMessage}</p>}
-      <p>
-        Progress: {progress.current}/{progress.total} chunks
-      </p>
+      {loading && (
+        <div className="flex flex-col items-center justify-center gap-2">
+          <p>{loadingMessage}</p>
+          <p>
+            Progress: {progress.current}/{progress.total} chunks
+          </p>
+        </div>
+      )}
       {text && <pre className="w-prose text-wrap">{text}</pre>}
     </div>
   );
