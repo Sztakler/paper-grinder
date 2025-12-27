@@ -1,11 +1,11 @@
+import { useFileUpload } from "hooks/useFileUpload";
 import React, { useState, DragEvent } from "react";
 
-type FileDropzoneProps = {
-  onFileDrop: (file: File) => void;
-};
+type FileDropzoneProps = {};
 
-export default function FileDropzone({ onFileDrop }: FileDropzoneProps) {
+export default function FileDropzone({}: FileDropzoneProps) {
   const [isDragging, setIsDragging] = useState(false);
+  const { upload, loading, loadingMessage, text, progress } = useFileUpload();
 
   const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -23,18 +23,26 @@ export default function FileDropzone({ onFileDrop }: FileDropzoneProps) {
     const file = e.dataTransfer.files[0];
     if (!file) return;
 
-    onFileDrop(file);
+    handleFile(file);
   };
 
   const handleManualPick = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) onFileDrop(file);
+    if (file) handleFile(file);
+  };
+
+  const handleFile = (file: File) => {
+    if (file.type !== "application/pdf") {
+      alert("Currently this app supports only PDF files. Sorry :/");
+      return;
+    }
+    upload(file);
   };
 
   return (
-    <form className={`flex justify-center`}>
+    <div className="flex flex-col items-center gap-8">
       <div
-        className={`mt-2 flex justify-center rounded-lg border border-dashed border-white/25 px-16 py-12 w-fit ${isDragging ? "bg-[#d4d6d2]" : ""}`}
+        className={`mt-8 flex justify-center rounded-lg border border-dashed border-white/25 px-16  w-fit ${isDragging ? "bg-[#d4d6d2]" : ""}`}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
@@ -64,11 +72,7 @@ export default function FileDropzone({ onFileDrop }: FileDropzoneProps) {
                 type="file"
                 name="file-upload"
                 className="sr-only"
-                onChange={(e) => {
-                  const file = e.target.files[0];
-                  setFile(file);
-                  handleUpload(file);
-                }}
+                onChange={handleManualPick}
               />
             </label>
             <p className="pl-1">or drag and drop</p>
@@ -76,31 +80,15 @@ export default function FileDropzone({ onFileDrop }: FileDropzoneProps) {
           <p className="text-xs/5 text-gray-600">PNG, JPG, GIF up to 10MB</p>
         </div>
       </div>
-    </form>
-
-    // <div
-    //   onDragOver={handleDragOver}
-    //   onDragLeave={handleDragLeave}
-    //   onDrop={handleDrop}
-    // className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-all ${
-    //     isDragging
-    //       ? "bg-gray-200 border-blue-500"
-    //       : "bg-gray-50 border-gray-400"
-    //   }`}
-    //   onClick={() => document.getElementById("fileInput")?.click()}
-    // >
-    //   <input
-    //     id="fileInput"
-    //     type="file"
-    //     accept="application/pdf"
-    //     className="hidden"
-    //     onChange={handleManualPick}
-    //   />
-
-    //   <p className="text-xl font-semibold">
-    //     {isDragging ? "Puść to kurwa" : "Przeciągnij PDF albo kliknij"}
-    //   </p>
-    //   <p className="text-gray-500 mt-2 text-sm">Obsługuję tylko pliki PDF</p>
-    // </div>
+      {loading && (
+        <div className="flex flex-col items-center justify-center gap-2">
+          <p>{loadingMessage}</p>
+          <p>
+            Progress: {progress.current}/{progress.total} chunks
+          </p>
+        </div>
+      )}
+      {text && <pre className="w-prose text-wrap">{text}</pre>}
+    </div>
   );
 }
