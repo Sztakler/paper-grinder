@@ -27,3 +27,27 @@ jobs:
       - name: Run backend tests
         working-directory: backend
         run: pytest
+
+  frontend:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install deps
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run tests
+        working-directory: frontend
+        run: npm test -- --runInBand
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
