@@ -3,7 +3,7 @@ name: CI
 on:
   push:
     branches: [ main, develop ]
-  pull_request:
+  pull_request: [ main, develop ]
 
 jobs:
   backend:
@@ -33,12 +33,12 @@ jobs:
 
     steps:
       - name: Checkout repo
-      - uses: actions/checkout@v4
+        uses: actions/checkout@v4
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          version: "latest"
+          bun-version: "latest"
 
       - name: Install deps
         working-directory: frontend
