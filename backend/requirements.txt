@@ -8,3 +8,5 @@ python-multipart
 pdf2image
 pytesseract
 pytest
+rank-bm25
+groq
