@@ -7,7 +7,7 @@ import re
 import asyncio
 from io import BytesIO
 import uuid
-from utils.text import is_text_legible, clean_text
+from app.utils.text import is_text_legible, clean_text
 
 app = FastAPI()
 app.state.jobs = {}

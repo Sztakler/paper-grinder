@@ -1,7 +1,7 @@
 import re
 
 def is_text_legible(text: str) -> bool:
-    alnum = len(re.findall(r"[\w]", text, re.UNICODE))
+    alnum = len(re.findall(r"[\w\s]", text, re.UNICODE))
     total = len(text)
     return total > 0 and (alnum / total) > 0.6
 
