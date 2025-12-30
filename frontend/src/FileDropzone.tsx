@@ -1,11 +1,20 @@
 import { useFileUpload } from "hooks/useFileUpload";
 import React, { useState, DragEvent } from "react";
+import AIChat from "./AIChat";
 
 type FileDropzoneProps = {};
 
 export default function FileDropzone({}: FileDropzoneProps) {
   const [isDragging, setIsDragging] = useState(false);
-  const { upload, loading, loadingMessage, text, progress } = useFileUpload();
+  const {
+    upload,
+    loading,
+    loadingMessage,
+    text,
+    progress,
+    jobId,
+    processingDone,
+  } = useFileUpload();
 
   const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -31,16 +40,24 @@ export default function FileDropzone({}: FileDropzoneProps) {
     if (file) handleFile(file);
   };
 
-  const handleFile = (file: File) => {
+  const handleFile = async (file: File) => {
     if (file.type !== "application/pdf") {
       alert("Currently this app supports only PDF files. Sorry :/");
       return;
     }
-    upload(file);
+
+    const result = await upload(file);
+
+    if (result) {
+    }
+    console.log(`<FileDropzone> JobId: ${result}`);
   };
 
   return (
     <div className="flex flex-col items-center gap-8">
+      <p>JobId: {jobId}</p>
+      <p>processingDone: {processingDone ? "true" : "false"}</p>
+      <AIChat jobId={jobId} processingDone={processingDone} />
       <div
         className={`mt-8 flex justify-center rounded-lg border border-dashed border-white/25 px-16  w-fit ${isDragging ? "bg-[#d4d6d2]" : ""}`}
         onDragOver={handleDragOver}

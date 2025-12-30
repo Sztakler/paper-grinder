@@ -132,78 +132,131 @@ async def ws_stream(websocket: WebSocket, job_id: str):
             break
     
     await websocket.close()
-    del app.state.jobs[job_id]
+    # del app.state.jobs[job_id]
 
-@app.websocket("ws/chat/{job_id}")
+@app.websocket("/ws/chat/{job_id}")
 async def ws_chat(websocket: WebSocket, job_id: str):
-    await websocket.accept()
-
-    if job_id not in app.state.jobs:
-        await websocket.send_json({"error": "Job not found"})
-        await websocket.close()
-        return
-
-    job = app.state.jobs[job_id]
-
-    queue: asyncio.Queue = job["queue"]
-    while True:
-        msg = await queue.get()
-        if msg.get("status") == "done":
-            break
-
-    if not job.get("chunks"):
-        await websocket.send_json({"error": "Not chunk available"})
-        await websocket.close()
-        return
-
-    if job.get("bm25)") is None:
-        await websocket.send_json({"error": "Failed to build search index"})
-        await websocket.close()
-        return
-
+    print(f"\n[CHAT_WS] ⚡ Nowy klient próbuje połączyć się z job_id = {job_id}")
+    
     try:
-        while True:
-            data = await websocket.receive_json()
-            if "query" not in data:
-                continue
+        await websocket.accept()
+        print(f"[CHAT_WS] ✅ Połączenie zaakceptowane dla {job_id}")
 
-            query = data["query"].strip()
-                if not query:
+        if job_id not in app.state.jobs:
+            print(f"[CHAT_WS] ❌ Job {job_id} NIE ISTNIEJE w app.state.jobs")
+            await websocket.send_json({"error": "Job not found"})
+            await websocket.close()
+            return
+
+        job = app.state.jobs[job_id]
+        print(f"[CHAT_WS] ✅ Job znaleziony. Zawartość kluczy: {list(job.keys())}")
+        print(f"[CHAT_WS] 📄 Liczba zapisanych chunków: {len(job.get('chunks', []))}")
+        print(f"[CHAT_WS] 🔍 Czy bm25 istnieje? {'bm25' in job} → {job.get('bm25') is not None}")
+
+        # Czekamy na zakończenie przetwarzania PDF-a
+        # queue: asyncio.Queue = job["queue"]
+        # print(f"[CHAT_WS] Oczekiwanie na sygnał 'done' z kolejki przetwarzania...")
+
+        # try:
+        #     while True:
+        #         msg = await asyncio.wait_for(queue.get(), timeout=30.0)
+        #         print(f"[CHAT_WS] Otrzymano z kolejki: {msg}")
+        #         if msg.get("status") == "done":
+        #             print(f"[CHAT_WS] Przetwarzanie PDF-a zakończone!")
+        #             break
+        # except asyncio.TimeoutError:
+        #     print(f"[CHAT_WS] Timeout! Przetwarzanie nie zakończyło się w ciągu 30s")
+        #     await websocket.send_json({"error": "Przetwarzanie PDF-a nie zakończone (timeout)"})
+        #     await websocket.close()
+        #     return
+
+        # Check if chunks are available
+        if not job.get("chunks"):
+            print(f"[CHAT_WS] ❌ Brak chunków tekstu – PDF pusty lub błąd OCR")
+            await websocket.send_json({"error": "Brak przetworzonych fragmentów tekstu z PDF-a"})
+            await websocket.close()
+            return
+
+        if job.get("bm25") is None:
+            print(f"[CHAT_WS] ❌ Indeks BM25 nie został zbudowany (prawdopodobnie brak chunków)")
+            await websocket.send_json({"error": "Nie udało się zbudować indeksu wyszukiwania"})
+            await websocket.close()
+            return
+
+        print(f"[CHAT_WS] Wszystko gotowe! BM25 działa, mamy {len(job['chunks'])} chunków.")
+        print(f"[CHAT_WS] Czekam na pytania od użytkownika...\n")
+
+        # Główna pętla czatu
+        while True:
+            try:
+                data = await websocket.receive_json()
+                print(f"[CHAT_WS] Otrzymano wiadomość od klienta: {data}")
+
+                if "query" not in data:
+                    print("[CHAT_WS] Brak klucza 'query' – ignoruję")
                     continue
 
-            tokenized_query = query.lower().split()
-            scores = job["bm25"].get_scores(tokenized_query)
-            top_indices = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:5]
-            context = "\n\n".join([job["chunks"][i]["text"] for i in top_indices if scores[i] > 0])
+                query = data["query"].strip()
+                if not query:
+                    print("[CHAT_WS] Puste pytanie – ignoruję")
+                    continue
 
-            if not context:
-                await websocket.send_json({"response": "Could find any relevant fragments in the document."})
-                continue
+                print(f"[CHAT_WS] Przetwarzam pytanie: '{query}'")
 
-            system_prompt = "Jesteś pomocnym asystentem analizującym treść PDF. Odpowiadaj po polsku, opierając się wyłącznie na podanym kontekście."
-            user_prompt = f"Kontekst z PDF:\n{context}\n\nPytanie użytkownika: {query}\nOdpowiedź:"
+                # Retrieval
+                tokenized_query = query.lower().split()
+                scores = job["bm25"].get_scores(tokenized_query)
+                top_indices = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:5]
+                relevant_chunks = [job["chunks"][i] for i in top_indices if scores[i] > 0]
 
-            stream = client.chat.completions.create(
-                model="llama-3.1-70b-versatile",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                temperature=0.7,
-                max_tokens=1024,
-                stream=True,
-            )
+                if not relevant_chunks:
+                    print("[CHAT_WS] Nie znaleziono żadnych pasujących fragmentów")
+                    await websocket.send_json({
+                        "response": "Nie znalazłem żadnych pasujących fragmentów w dokumencie."
+                    })
+                    continue
 
-            full_response = ""
-            for chunk in stream:
-                if chunk.choices[0].delta.content:
-                    token = chunk.choices[0].delta.content
-                    full_response += token
-                    await websocket.send_json({"token": token})
+                context = "\n\n".join([chunk["text"] for chunk in relevant_chunks])
+                print(f"[CHAT_WS] Znaleziono {len(relevant_chunks)} pasujących chunków – wysyłamy do LLM")
 
-            await websocket.send_json({"done": True, "full_reponse": full_response})
-            
+                # Prompt do Groq
+                system_prompt = "Jesteś pomocnym asystentem analizującym treść PDF. Odpowiadaj po polsku, opierając się wyłącznie na podanym kontekście."
+                user_prompt = f"Kontekst z PDF:\n{context}\n\nPytanie użytkownika: {query}\nOdpowiedź:"
+
+                # Streaming odpowiedzi
+                stream = client.chat.completions.create(
+                    model="llama-3.3-70b-versatile",
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    temperature=0.7,
+                    max_tokens=1024,
+                    stream=True,
+                )
+
+                full_response = ""
+                print("[CHAT_WS] Streaming odpowiedzi z Groq...")
+                for chunk in stream:
+                    if chunk.choices[0].delta.content:
+                        token = chunk.choices[0].delta.content
+                        full_response += token
+                        await websocket.send_json({"token": token})
+
+                await websocket.send_json({"done": True, "full_response": full_response})
+                print(f"[CHAT_WS] Odpowiedź zakończona (długość: {len(full_response)} znaków)\n")
+
+            except Exception as recv_error:
+                print(f"[CHAT_WS] Błąd podczas odbierania/przetwarzania wiadomości: {recv_error}")
+                break
+
     except Exception as e:
-        await websocket.send_json({"error": f"AI error: {str(e)}"})
+        print(f"[CHAT_WS] Krytyczny błąd w WebSocket chat: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
+        try:
+            await websocket.send_json({"error": f"Błąd serwera: {str(e)}"})
+        except:
+            pass
     finally:
-        await websocket.close()
+        print(f"[CHAT_WS] Zamykam połączenie dla job_id = {job_id}\n")

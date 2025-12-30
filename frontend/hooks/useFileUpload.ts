@@ -8,10 +8,14 @@ export function useFileUpload() {
   const [loading, setLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState("");
   const [progress, setProgress] = useState({ current: 0, total: 0 });
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [processingDone, setProcessingDone] = useState(false);
   const wsCancelRef = { current: null as null | (() => void) };
 
   async function upload(file: File) {
     setLoading(true);
+    setProcessingDone(false);
+    setJobId(null);
     setText("");
     textRef.current = "";
     setProgress({ current: 0, total: 0 });
@@ -19,6 +23,7 @@ export function useFileUpload() {
 
     try {
       const { job_id } = await uploadFileHTTP(file);
+      setJobId(job_id);
 
       wsCancelRef.current = streamResultWS(job_id, {
         onChunk: (data: any) => {
@@ -29,15 +34,24 @@ export function useFileUpload() {
             total: data.total_chunks,
           });
         },
-        onDone: () => setLoading(false),
-        onError: (err: any) => {
-          console.error(err);
+        onDone: () => {
           setLoading(false);
+          setProcessingDone(true);
+        },
+        onError: (err: any) => {
+          console.error("WebSocket error:", err);
+          setLoading(false);
+          setLoadingMessage("Processing error");
+          setProcessingDone(true);
         },
       });
+      return job_id;
     } catch (err) {
-      console.error(err);
+      console.error("Upload error:", err);
       setLoading(false);
+      setLoadingMessage("Upload error");
+      setProcessingDone(true);
+      return null;
     }
   }
 
@@ -46,5 +60,14 @@ export function useFileUpload() {
     setLoading(false);
   }
 
-  return { upload, cancel, text, loading, loadingMessage, progress };
+  return {
+    upload,
+    cancel,
+    text,
+    loading,
+    loadingMessage,
+    progress,
+    jobId,
+    processingDone,
+  };
 }
